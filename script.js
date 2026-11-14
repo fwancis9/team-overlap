@@ -6,7 +6,7 @@
   const SLOT_MS = SAMPLE_MINUTES * MINUTE_MS;
   const DAY_MS = 24 * 60 * MINUTE_MS;
   /* Preferred hours as minutes after local midnight. Anyone without their own uses the default. */
-  const DEFAULT_HOURS = [{ start: 9 * 60, end: 18 * 60 }];
+  const DEFAULT_HOURS = [{ start: 9 * 60, end: 23 * 60 }];
   const WEEKEND_DAYS = ["Sat", "Sun"];
   /* Browsers only give "GMT+8" for Manila, so name it the way people say it. */
   const ZONE_NAMES = { "Asia/Manila": "PHT" };
