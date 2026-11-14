@@ -67,6 +67,7 @@ p { margin: 0; color: var(--muted); }
 .now-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0.75rem; }
 @media (max-width: 760px) { .now-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 .now-person {
+  border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
   background: var(--background);
   border-radius: 14px;
   padding: 0.85rem 0.9rem;
@@ -163,7 +164,7 @@ select.overlay-control { -webkit-appearance: none; appearance: none; }
 
 /* Rolling digits: changed characters slide through a clipped window that fades at its top and bottom edges. */
 .plan-range-text { display: block; line-height: 1.1; white-space: nowrap; }
-.range-dash { opacity: 0.35; font-weight: 400; }
+.range-dash { opacity: 0.62; font-weight: 400; } /* 0.62 keeps 4.5:1 contrast in light and dark */
 .roll-char { display: inline-block; position: relative; white-space: pre; vertical-align: top; line-height: 1.1; }
 .roll-window {
   overflow: hidden;
