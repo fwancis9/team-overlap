@@ -288,6 +288,7 @@
     const delay = MINUTE_MS - (Date.now() % MINUTE_MS) + 50;
     setTimeout(function () {
       renderNow();
+      renderDayChart();
       scheduleNextMinute();
     }, delay);
   }
@@ -425,6 +426,93 @@
     renderPlanResult();
   }
 
+  /* Today's slots between device-local midnights, including daylight-saving changes. */
+  function dayChartDateRange() {
+    const dateString = deviceDateString(Date.now());
+    const dayStart = deviceMidnight(dateString);
+    const nextDay = new Date(dayStart);
+    nextDay.setDate(nextDay.getDate() + 1);
+    const dayEnd = deviceMidnight(deviceDateString(nextDay.getTime()));
+    const slots = [];
+    for (let slot = dayStart; slot < dayEnd; slot += SLOT_MS) slots.push(slot);
+    return { dateString: dateString, dayStart: dayStart, slots: slots };
+  }
+
+  /* One "AM" and one "PM" band, each spanning its half of the day's columns. */
+  function createDayChartBands(slots) {
+    const firstPmIndex = slots.findIndex(function (slot) { return new Date(slot).getHours() >= 12; });
+    const halves = [
+      { label: "AM", start: 0, end: firstPmIndex === -1 ? slots.length : firstPmIndex },
+      { label: "PM", start: firstPmIndex === -1 ? slots.length : firstPmIndex, end: slots.length }
+    ];
+    return halves.filter(function (half) { return half.end > half.start; }).map(function (half) {
+      const band = createElement("div", "day-chart-band");
+      band.style.gridColumn = (half.start + 2) + " / " + (half.end + 2);
+      band.appendChild(createElement("span", "day-chart-band-label", half.label));
+      return band;
+    });
+  }
+
+  /* Hour number on the hour: 12, 1, 2 … 11. */
+  function dayChartHourLabel(slot) {
+    const date = new Date(slot);
+    if (date.getMinutes() !== 0) return "";
+    const hour = date.getHours() % 12;
+    return String(hour === 0 ? 12 : hour);
+  }
+
+  function createDayChartColumn(slot, index, isPast) {
+    const column = createElement("div", "day-chart-column");
+    column.style.gridColumn = String(index + 2);
+    if (isPast) column.classList.add("is-past");
+    column.appendChild(createElement("span", "day-chart-hour-label", dayChartHourLabel(slot)));
+    PEOPLE.forEach(function (person) {
+      const state = personState(slot, person);
+      column.appendChild(createElement("span", "day-chart-cell " + (state === "available" ? "is-available" : "is-unavailable")));
+    });
+    return column;
+  }
+
+  function createDayChartNameStack() {
+    const labels = createElement("div", "day-chart-name-stack");
+    labels.append(createElement("span"), createElement("span"));
+    PEOPLE.forEach(function (person) {
+      labels.appendChild(createElement("span", "day-chart-row-label", person.name));
+    });
+    return labels;
+  }
+
+  /* Read-only map of today, separate from the planner; rebuilds only when the day, past cutoff or zone changes. */
+  function renderDayChart() {
+    const grid = document.getElementById("day-chart-grid");
+    const zone = zoneName(Date.now(), Intl.DateTimeFormat().resolvedOptions().timeZone);
+    const dateRange = dayChartDateRange();
+    const pastCutoff = nextSlotStart();
+    const key = JSON.stringify([dateRange.dateString, dateRange.slots.length, pastCutoff, zone]);
+    if (grid.dataset.key === key) return;
+    const isNewDay = grid.dataset.date !== dateRange.dateString;
+
+    const columns = dateRange.slots.map(function (slot, index) { return createDayChartColumn(slot, index, slot < pastCutoff); });
+    grid.style.setProperty("--day-chart-slot-count", String(dateRange.slots.length));
+    grid.setAttribute("aria-label", "Who is in their preferred hours today, " + formatDateLong(dateRange.dayStart, undefined) + ".");
+    document.getElementById("day-chart-date").textContent = formatDateLong(dateRange.dayStart, undefined);
+    document.getElementById("day-chart-zone").textContent = zone;
+    grid.replaceChildren.apply(grid, [createDayChartNameStack()].concat(createDayChartBands(dateRange.slots), columns));
+    grid.dataset.key = key;
+    grid.dataset.date = dateRange.dateString;
+    if (isNewDay) revealCurrentTime(grid);
+  }
+
+  /* On narrow screens, scrolls the chart itself (never the page) so the current time is in view. */
+  function revealCurrentTime(grid) {
+    const scroller = grid.parentElement;
+    const current = grid.querySelector(".day-chart-column:not(.is-past)");
+    if (!current || scroller.scrollWidth <= scroller.clientWidth) return;
+    const labelWidth = grid.querySelector(".day-chart-name-stack").getBoundingClientRect().width;
+    const currentLeft = current.getBoundingClientRect().left - scroller.getBoundingClientRect().left;
+    scroller.scrollLeft += currentLeft - labelWidth - current.getBoundingClientRect().width * 2;
+  }
+
   function moveTo(nextStart) {
     planner.direction = nextStart >= planner.start ? "up" : "down";
     planner.start = nextStart;
@@ -549,6 +637,7 @@
       renderLengthSelect();
       planner.start = findSoonestBest();
       renderPlanner();
+      renderDayChart();
       bindEvents();
       scheduleNextMinute();
     } catch (error) {

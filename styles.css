@@ -92,6 +92,67 @@ p { margin: 0; color: var(--muted); }
   border: 1px solid var(--border); border-radius: 20px; background: var(--surface);
   padding: 1.25rem; display: grid; gap: 1.1rem; scroll-margin-top: 16px;
 }
+.day-chart {
+  min-width: 0; border: 1px solid var(--border); border-radius: 20px; background: var(--surface);
+  padding: 1.25rem; display: grid; gap: 1rem;
+}
+.day-chart-heading { display: grid; gap: 0.35rem; }
+.day-chart-scroll { min-width: 0; max-width: 100%; overflow-x: auto; overflow-y: hidden; }
+/* Rows: AM/PM band, hour numbers, then one row per person. */
+.day-chart-grid {
+  --day-chart-body-rows: 18px repeat(4, 22px);
+  --day-chart-rows: 16px var(--day-chart-body-rows);
+  display: grid;
+  grid-template-columns: 5.5rem repeat(var(--day-chart-slot-count), minmax(0, 1fr));
+  grid-template-rows: var(--day-chart-rows);
+  gap: 2px;
+  width: 100%;
+}
+.day-chart-name-stack,
+.day-chart-column {
+  grid-row: 1 / -1;
+  display: grid;
+  grid-template-rows: var(--day-chart-rows);
+  grid-template-columns: minmax(0, 1fr);
+  gap: 2px;
+}
+/* Columns sit below the AM/PM band row. */
+.day-chart-column { grid-row: 2 / -1; grid-template-rows: var(--day-chart-body-rows); }
+.day-chart-name-stack {
+  position: sticky; left: 0; z-index: 2; grid-column: 1;
+  padding-right: 0.45rem; background: var(--surface);
+}
+.day-chart-column { position: relative; min-width: 0; }
+/* Past half hours fade; their hour and AM/PM labels stay readable. */
+.day-chart-column.is-past .day-chart-cell { opacity: 0.3; }
+.day-chart-row-label {
+  align-self: center; color: var(--muted); font-size: 0.78rem; line-height: 1.2; white-space: nowrap;
+}
+.day-chart-hour-label { overflow: visible; white-space: nowrap; color: var(--muted); }
+/* "AM" / "PM" over its half of the day; the label pins beside the names while the chart scrolls. */
+.day-chart-band {
+  grid-row: 1; display: flex; align-items: center; gap: 6px; min-width: 0;
+  border-left: 1px solid var(--border); padding-left: 4px;
+}
+.day-chart-band-label {
+  position: sticky; left: 5.5rem; z-index: 1; padding-left: 4px; margin-left: -4px; background: var(--surface);
+  color: var(--muted); font-size: 0.66rem; letter-spacing: 0.06em; line-height: 16px;
+}
+.day-chart-hour-label { font-size: 0.75rem; line-height: 18px; font-variant-numeric: tabular-nums; }
+.day-chart-cell { display: block; min-width: 0; border-radius: 3px; }
+.day-chart-cell.is-available,
+.day-chart-swatch-good { background: var(--good); }
+.day-chart-cell.is-unavailable,
+.day-chart-swatch-outside { background: color-mix(in srgb, var(--outside) 35%, transparent); }
+.day-chart-legend { display: flex; flex-wrap: wrap; gap: 0.45rem 1rem; color: var(--muted); font-size: 0.8rem; }
+.day-chart-legend-item { display: inline-flex; align-items: center; gap: 0.4rem; }
+.day-chart-swatch { width: 0.75rem; height: 0.75rem; flex: none; border-radius: 3px; }
+@media (max-width: 700px) {
+  .day-chart-grid {
+    width: max-content;
+    grid-template-columns: 5.5rem repeat(var(--day-chart-slot-count), 14px);
+  }
+}
 .quick-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 0.5rem; }
 .primary-button {
   font: inherit; font-weight: 500; font-size: 0.9rem;

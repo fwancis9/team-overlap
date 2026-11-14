@@ -67,6 +67,19 @@
       <button class="primary-button" id="soonest-button" type="button">Find earliest best time for all</button>
     </div>
   </section>
+  <section class="day-chart" id="day-chart" aria-labelledby="day-chart-title">
+    <div class="day-chart-heading">
+      <h2 id="day-chart-title">Day at a glance</h2>
+      <p>Today, <span id="day-chart-date"></span>. Times are in your time (<span id="day-chart-zone"></span>).</p>
+    </div>
+    <div class="day-chart-scroll">
+      <div class="day-chart-grid" id="day-chart-grid" role="img"></div>
+    </div>
+    <div class="day-chart-legend" aria-label="Chart legend">
+      <span class="day-chart-legend-item"><span class="day-chart-swatch day-chart-swatch-good" aria-hidden="true"></span>Good time</span>
+      <span class="day-chart-legend-item"><span class="day-chart-swatch day-chart-swatch-outside" aria-hidden="true"></span>Outside hours</span>
+    </div>
+  </section>
   <footer class="site-footer">
     Made with love by <a href="https://github.com/fwancis9" target="_blank" rel="noopener">fwancis9</a>
   </footer>
