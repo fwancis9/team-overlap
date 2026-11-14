@@ -1,6 +1,8 @@
 # Team Overlap
 
-A simple page for a team spread across time zones. See everyone's time right now and find a meeting time that works.
+A simple page for finding a meeting time that fits everyone's preferred hours.
+
+Each person sets the hours they like to meet, and the page shows when those hours overlap. It works for any team, even one where everyone shares a time zone. Different time zones are a bonus: each person's hours are read in their own local time, so it also works across countries.
 
 **Live:** https://fwancis9.github.io/team-overlap/
 
