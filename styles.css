@@ -218,3 +218,11 @@ select.overlay-control { -webkit-appearance: none; appearance: none; }
 @keyframes arrow-out-right { to { transform: translateX(150%); } }
 @keyframes arrow-in-left { from { transform: translateX(150%); } to { transform: none; } }
 @keyframes arrow-in-right { from { transform: translateX(-150%); } to { transform: none; } }
+
+/* Text-only credit line at the bottom of the page. */
+.site-footer { text-align: center; font-size: 0.9rem; color: var(--muted); padding-top: 0.5rem; }
+.site-footer a {
+  color: var(--text); text-decoration: underline; text-decoration-color: var(--border);
+  text-underline-offset: 3px; transition: text-decoration-color 150ms ease;
+}
+.site-footer a:hover { text-decoration-color: var(--text); }
