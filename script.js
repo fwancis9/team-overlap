@@ -15,7 +15,7 @@
   ];
   const PEOPLE = [
     { name: "Gage", zone: "America/Denver" },
-    { name: "Cora", zone: "America/Los_Angeles" },
+    { name: "Cora", zone: "Europe/London" },
     { name: "Wills", zone: "Asia/Manila" },
     { name: "Marc", zone: "Asia/Manila" }
   ];
