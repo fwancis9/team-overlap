@@ -4,9 +4,12 @@
   const MINUTE_MS = 60000;
   const SAMPLE_MINUTES = 30;
   const SLOT_MS = SAMPLE_MINUTES * MINUTE_MS;
-  const SEARCH_LIMIT_SLOTS = 14 * 48;
-  const WORK_HOURS = { start: 9, end: 18 };
-  const AWAKE_HOURS = { start: 7, end: 23 };
+  const DAY_MS = 24 * 60 * MINUTE_MS;
+  /* Preferred hours as minutes after local midnight. Anyone without their own uses the default. */
+  const DEFAULT_HOURS = [{ start: 9 * 60, end: 18 * 60 }];
+  const WEEKEND_DAYS = ["Sat", "Sun"];
+  /* Browsers only give "GMT+8" for Manila, so name it the way people say it. */
+  const ZONE_NAMES = { "Asia/Manila": "PHT" };
   const LENGTH_CHOICES = [
     { minutes: 30, label: "30 min meeting" },
     { minutes: 60, label: "1 hr meeting" },
@@ -17,18 +20,24 @@
     { name: "Gage", zone: "America/Denver" },
     { name: "Cora", zone: "Europe/London" },
     { name: "Wills", zone: "Asia/Manila" },
-    { name: "Marc", zone: "Asia/Manila" }
+    {
+      name: "Marc",
+      zone: "Asia/Manila",
+      hours: {
+        weekday: [{ start: 20 * 60, end: 23 * 60 }],
+        weekend: [{ start: 13 * 60, end: 23 * 60 }]
+      }
+    }
   ];
   const PLAN_VERDICT_TEXT = {
     good: "Good time for everyone.",
     bad: "No time works for everyone in the next two weeks."
   };
-  const STATE_TEXT = { work: "Good time", awake: "After hours", sleep: "Asleep" };
-  /* Lucide icons (lucide.dev, ISC license): sun, sunset. Lucide has no "zzz", so sleep is a matching hand-drawn Zzz. */
+  const STATE_TEXT = { available: "Good time", unavailable: "Outside hours" };
+  /* Lucide icons (lucide.dev, ISC license): sun, circle-minus. */
   const STATE_ICON_PATHS = {
-    work: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/>',
-    awake: '<path d="M12 10V2"/><path d="m4.93 10.93 1.41 1.41"/><path d="M2 18h2"/><path d="M20 18h2"/><path d="m19.07 10.93-1.41 1.41"/><path d="M22 22H2"/><path d="m16 6-4 4-4-4"/><path d="M16 18a4 4 0 0 0-8 0"/>',
-    sleep: '<path d="M3 13h7l-7 8h7"/><path d="M13 7h5l-5 6h5"/><path d="M19 2h3l-3 4h3"/>'
+    available: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/>',
+    unavailable: '<circle cx="12" cy="12" r="10"/><path d="M8 12h8"/>'
   };
   const SVG_NAMESPACE = "http://www.w3.org/2000/svg";
   const planner = { start: null, lengthMinutes: 60, direction: "up" };
@@ -37,12 +46,15 @@
 
   /* ---------- Time helpers ---------- */
 
-  const hourFormatters = new Map();
-  function localHour(timestamp, zone) {
-    if (!hourFormatters.has(zone)) {
-      hourFormatters.set(zone, new Intl.DateTimeFormat("en-US", { timeZone: zone, hour: "numeric", hourCycle: "h23" }));
+  const clockFormatters = new Map();
+  /* Local weekday ("Sat") and minutes after midnight for a moment in a time zone. */
+  function localClock(timestamp, zone) {
+    if (!clockFormatters.has(zone)) {
+      clockFormatters.set(zone, new Intl.DateTimeFormat("en-US", { timeZone: zone, weekday: "short", hour: "numeric", minute: "numeric", hourCycle: "h23" }));
     }
-    return Number(hourFormatters.get(zone).format(new Date(timestamp))) % 24;
+    const parts = {};
+    clockFormatters.get(zone).formatToParts(new Date(timestamp)).forEach(function (part) { parts[part.type] = part.value; });
+    return { weekday: parts.weekday, minutes: (Number(parts.hour) % 24) * 60 + Number(parts.minute) };
   }
 
   function formatTime(timestamp, zone) {
@@ -63,51 +75,93 @@
 
   /* ---------- Availability ---------- */
 
-  function personState(timestamp, zone) {
-    const hour = localHour(timestamp, zone);
-    if (hour >= WORK_HOURS.start && hour < WORK_HOURS.end) return "work";
-    if (hour >= AWAKE_HOURS.start && hour < AWAKE_HOURS.end) return "awake";
-    return "sleep";
+  function preferredHours(person, weekday) {
+    if (!person.hours) return DEFAULT_HOURS;
+    return WEEKEND_DAYS.includes(weekday) ? person.hours.weekend : person.hours.weekday;
   }
 
-  function personStateOverRange(start, lengthMinutes, zone) {
-    const rank = { work: 2, awake: 1, sleep: 0 };
-    let worst = "work";
-    for (let offset = 0; offset < lengthMinutes; offset += SAMPLE_MINUTES) {
-      const current = personState(start + offset * MINUTE_MS, zone);
-      if (rank[current] < rank[worst]) worst = current;
+  /* 1200 -> "8 PM", 1230 -> "8:30 PM" */
+  function formatMinutes(minutes) {
+    const hour = Math.floor(minutes / 60) % 24;
+    const minute = minutes % 60;
+    const hour12 = hour % 12 === 0 ? 12 : hour % 12;
+    return hour12 + (minute ? ":" + String(minute).padStart(2, "0") : "") + (hour < 12 ? " AM" : " PM");
+  }
+
+  /* e.g. "1 PM – 11 PM" or "3 PM – 7 PM, 8 PM – 10 PM" */
+  function windowsText(windows) {
+    return windows.map(function (window) {
+      return formatMinutes(window.start) + " – " + formatMinutes(window.end);
+    }).join(", ");
+  }
+
+  /* Short zone name at a moment, e.g. "MST", "GMT", "PHT". */
+  function zoneName(timestamp, zone) {
+    if (ZONE_NAMES[zone]) return ZONE_NAMES[zone];
+    try {
+      const part = new Intl.DateTimeFormat("en-US", { timeZone: zone, timeZoneName: "short" })
+        .formatToParts(new Date(timestamp))
+        .find(function (item) { return item.type === "timeZoneName"; });
+      return part ? part.value : "";
+    } catch (error) {
+      return "";
     }
-    return worst;
+  }
+
+  /* Rows for the card: one "Every day" row, or Weekdays and Weekends with today's marked current. */
+  function preferredHoursRows(timestamp, person) {
+    const isWeekend = WEEKEND_DAYS.includes(localClock(timestamp, person.zone).weekday);
+    const weekdayText = windowsText(preferredHours(person, "Mon"));
+    const weekendText = windowsText(preferredHours(person, "Sat"));
+    if (weekdayText === weekendText) return [{ label: "Every day", hours: weekdayText, isCurrent: true }];
+    return [
+      { label: "Weekdays", hours: weekdayText, isCurrent: !isWeekend },
+      { label: "Weekends", hours: weekendText, isCurrent: isWeekend }
+    ];
+  }
+
+  function personState(timestamp, person) {
+    const clock = localClock(timestamp, person.zone);
+    const isInside = preferredHours(person, clock.weekday).some(function (window) {
+      return clock.minutes >= window.start && clock.minutes < window.end;
+    });
+    return isInside ? "available" : "unavailable";
+  }
+
+  /* Available only if every half hour of the meeting falls inside their preferred hours. */
+  function personStateOverRange(start, lengthMinutes, person) {
+    for (let offset = 0; offset < lengthMinutes; offset += SAMPLE_MINUTES) {
+      if (personState(start + offset * MINUTE_MS, person) === "unavailable") return "unavailable";
+    }
+    return "available";
   }
 
   function statesFor(start) {
-    return PEOPLE.map(function (person) { return personStateOverRange(start, planner.lengthMinutes, person.zone); });
+    return PEOPLE.map(function (person) { return personStateOverRange(start, planner.lengthMinutes, person); });
   }
 
   function overallStatus(states) {
-    if (states.includes("sleep")) return "bad";
-    return states.every(function (item) { return item === "work"; }) ? "good" : "okay";
+    return states.every(function (item) { return item === "available"; }) ? "good" : "bad";
   }
 
-  function isWorkable(start) {
-    return overallStatus(statesFor(start)) !== "bad";
+  /* Higher is better: fewer total minutes of the meeting fall outside anyone's hours. */
+  function minutesScore(start) {
+    let outsideMinutes = 0;
+    PEOPLE.forEach(function (person) {
+      for (let offset = 0; offset < planner.lengthMinutes; offset += SAMPLE_MINUTES) {
+        if (personState(start + offset * MINUTE_MS, person) === "unavailable") outsideMinutes += SAMPLE_MINUTES;
+      }
+    });
+    return -outsideMinutes;
   }
 
-  /* Higher is better: how many people are inside work hours. -1 when someone is asleep. */
-  function slotScore(start) {
-    const states = statesFor(start);
-    if (states.includes("sleep")) return -1;
-    return states.filter(function (state) { return state === "work"; }).length;
-  }
-
-  /* Earliest slot with the highest score in the 24 hours from windowStart, never before the next slot from now. */
-  function findBestInDay(windowStart) {
+  /* Earliest slot with the highest score between windowStart and windowEnd, never before the next slot from now. */
+  function findBestBetween(windowStart, windowEnd, scoreOf) {
     const first = Math.max(Math.ceil(windowStart / SLOT_MS) * SLOT_MS, nextSlotStart());
-    const windowEnd = windowStart + 24 * 60 * MINUTE_MS;
     let best = null;
-    let bestScore = -1;
+    let bestScore = -Infinity;
     for (let candidate = first; candidate < windowEnd; candidate += SLOT_MS) {
-      const score = slotScore(candidate);
+      const score = scoreOf(candidate);
       if (score > bestScore) {
         best = candidate;
         bestScore = score;
@@ -116,16 +170,8 @@
     return best;
   }
 
-  /* Walks slot by slot from `from` in `direction` (+1 later, -1 earlier). Never goes before the next slot from now. */
-  function findWorkable(from, direction, includeFrom) {
-    const earliest = nextSlotStart();
-    let candidate = includeFrom ? from : from + direction * SLOT_MS;
-    for (let step = 0; step < SEARCH_LIMIT_SLOTS; step += 1) {
-      if (candidate < earliest) return null;
-      if (isWorkable(candidate)) return candidate;
-      candidate += direction * SLOT_MS;
-    }
-    return null;
+  function findBestInDay(dayStart) {
+    return findBestBetween(dayStart, dayStart + DAY_MS, minutesScore);
   }
 
   /* ---------- DOM helpers ---------- */
@@ -179,7 +225,7 @@
     return icon;
   }
 
-  /* Status text with its icon on the right, e.g. "Asleep ☾". Skips work when nothing changed. */
+  /* Status text with its icon on the right. Skips work when nothing changed. */
   function setStateLabel(element, state, baseClass) {
     if (element.dataset.state === state) return;
     element.dataset.state = state;
@@ -194,8 +240,9 @@
     const timeText = createElement("div", "now-time");
     const dayText = createElement("div", "now-day");
     const stateText = createElement("div", "now-state");
-    card.append(createElement("div", "now-name", person.name), timeText, dayText, stateText);
-    card.parts = { timeText: timeText, dayText: dayText, stateText: stateText };
+    const hoursText = createElement("div", "now-hours");
+    card.append(createElement("div", "now-name", person.name), timeText, dayText, stateText, hoursText);
+    card.parts = { timeText: timeText, dayText: dayText, stateText: stateText, hoursText: hoursText };
     return card;
   }
 
@@ -207,12 +254,25 @@
     return Array.from(grid.children);
   }
 
+  /* Heading names the zone once, so each row stays short enough for a narrow card. */
+  function renderHoursRows(element, heading, rows) {
+    const key = heading + JSON.stringify(rows);
+    if (element.dataset.key === key) return;
+    element.dataset.key = key;
+    const lines = rows.map(function (row) {
+      const line = createElement("div", "hours-row" + (row.isCurrent ? " is-current" : ""));
+      line.append(createElement("span", "hours-label", row.label), createElement("span", "hours-value", row.hours));
+      return line;
+    });
+    element.replaceChildren.apply(element, [createElement("div", "hours-heading", heading)].concat(lines));
+  }
+
   /* Updates each clock in place; only digits that changed roll up. */
   function renderNow() {
     const now = Date.now();
     nowCards().forEach(function (card, index) {
       const person = PEOPLE[index];
-      const state = personState(now, person.zone);
+      const state = personState(now, person);
       const timeText = formatTime(now, person.zone);
       if (previousTexts.now[index] !== timeText) {
         renderRolling(card.parts.timeText, previousTexts.now[index], timeText, "up");
@@ -220,6 +280,7 @@
       }
       card.parts.dayText.textContent = formatDateLong(now, person.zone);
       setStateLabel(card.parts.stateText, state, "now-state");
+      renderHoursRows(card.parts.hoursText, "Preferred hours, " + zoneName(now, person.zone), preferredHoursRows(now, person));
     });
   }
 
@@ -252,8 +313,8 @@
 
   function renderStepButtons() {
     const hasStart = planner.start !== null;
-    document.getElementById("earlier-button").disabled = !hasStart || findWorkable(planner.start, -1, false) === null;
-    document.getElementById("later-button").disabled = !hasStart || findWorkable(planner.start, 1, false) === null;
+    document.getElementById("earlier-button").disabled = !hasStart || planner.start - SLOT_MS < nextSlotStart();
+    document.getElementById("later-button").disabled = !hasStart;
   }
 
   function joinNames(names) {
@@ -261,36 +322,32 @@
     return names.slice(0, -1).join(", ") + " and " + names[names.length - 1];
   }
 
-  /* "early morning" if their off-hours part falls before work starts, otherwise "evening". */
-  function offHoursKind(start, zone) {
-    for (let offset = 0; offset < planner.lengthMinutes; offset += SAMPLE_MINUTES) {
-      const timestamp = start + offset * MINUTE_MS;
-      if (personState(timestamp, zone) === "awake") {
-        return localHour(timestamp, zone) < WORK_HOURS.start ? "early morning" : "evening";
-      }
-    }
-    return "evening";
-  }
-
-  /* Groups off-hours people by kind and local start time, e.g. "early morning for Wills and Marc (7:00 AM)". */
-  function offHoursDetail(start, states) {
+  /* Groups people in `targetState` by kind and local start time, so "Wills and Marc (7:00 AM)" share one phrase. */
+  function groupPeople(start, states, targetState, kindOf) {
     const groups = [];
     PEOPLE.forEach(function (person, index) {
-      if (states[index] !== "awake") return;
-      const kind = offHoursKind(start, person.zone);
+      if (states[index] !== targetState) return;
+      const kind = kindOf(person);
       const time = formatTime(start, person.zone);
       const existing = groups.find(function (group) { return group.kind === kind && group.time === time; });
       if (existing) existing.names.push(person.name);
       else groups.push({ kind: kind, time: time, names: [person.name] });
     });
-    return groups.map(function (group) {
-      return group.kind + " for " + joinNames(group.names) + " (" + group.time + ")";
-    }).join(" and ");
+    return groups;
   }
 
+  /* e.g. "outside hours for Gage (2:00 AM) and Wills and Marc (5:30 PM)" */
+  function unavailableDetail(start, states) {
+    const people = groupPeople(start, states, "unavailable", function () { return "unavailable"; })
+      .map(function (group) { return joinNames(group.names) + " (" + group.time + ")"; })
+      .join(" and ");
+    return "It's outside hours for " + people;
+  }
+
+
   function verdictText(status, states) {
-    if (status !== "okay") return PLAN_VERDICT_TEXT[status];
-    return "Okay, but it's " + offHoursDetail(planner.start, states) + ".";
+    if (status === "bad" && states.length) return "Not this time. " + unavailableDetail(planner.start, states) + ".";
+    return PLAN_VERDICT_TEXT[status];
   }
 
   /* Grows or shrinks the box to its new height instead of snapping. */
@@ -388,16 +445,18 @@
     windowElement.appendChild(incoming);
   }
 
+  /* Moves exactly 30 minutes, unavailable times included; the result line says who it's outside hours for. */
   function step(direction) {
+    const next = planner.start + direction * SLOT_MS;
+    if (next < nextSlotStart()) return;
     slideArrow(direction);
-    const next = findWorkable(planner.start, direction, false);
-    if (next === null) return;
     moveTo(next);
     renderPlanner();
   }
 
+  /* Time in the next 7 days with the fewest outside minutes, earliest on ties. */
   function findSoonestBest() {
-    return findBestInDay(nextSlotStart());
+    return findBestBetween(nextSlotStart(), nextSlotStart() + 7 * DAY_MS, minutesScore);
   }
 
   /* "YYYY-MM-DD" in the viewer's own device time zone. */
@@ -418,8 +477,7 @@
 
   function syncDateInput() {
     const input = document.getElementById("date-input");
-    const firstWorkable = findWorkable(nextSlotStart(), 1, true);
-    input.min = deviceDateString(firstWorkable === null ? Date.now() : firstWorkable);
+    input.min = deviceDateString(Date.now());
     if (planner.start === null) return;
     input.value = deviceDateString(planner.start);
     document.getElementById("date-label").textContent = formatPillDate(planner.start);
@@ -440,34 +498,11 @@
     if (!/^\d{4}-\d{2}-\d{2}$/.test(dateString)) return;
     const midnight = deviceMidnight(dateString);
     const best = findBestInDay(midnight);
-    if (best !== null) {
-      moveTo(best);
-      renderPlanner();
-      return;
-    }
-    const fallback = findWorkable(Math.max(Math.ceil(midnight / SLOT_MS) * SLOT_MS, nextSlotStart()), 1, true);
-    if (fallback === null) {
+    if (best === null) {
       syncDateInput();
-      renderVerdict("bad", [], "No time works for everyone on that date.");
       return;
     }
-    moveTo(fallback);
-    renderPlanner();
-    explainFallback(midnight);
-  }
-
-  /* Adds a note to the result line saying the picked date had nothing left. */
-  function explainFallback(pickedMidnight) {
-    const states = statesFor(planner.start);
-    const status = overallStatus(states);
-    const note = "Nothing works on " + formatPillDate(pickedMidnight) + ", so this is the next time that does. ";
-    renderVerdict(status, states, note + verdictText(status, states));
-  }
-
-  function jumpToEarliest() {
-    const earliest = findWorkable(nextSlotStart(), 1, true);
-    if (earliest === null) return;
-    moveTo(earliest);
+    moveTo(best);
     renderPlanner();
   }
 
@@ -481,9 +516,6 @@
   function changeLength(minutes) {
     planner.direction = minutes >= planner.lengthMinutes ? "up" : "down";
     planner.lengthMinutes = minutes;
-    if (planner.start === null || !isWorkable(planner.start)) {
-      planner.start = findWorkable(planner.start === null ? nextSlotStart() : planner.start, 1, true);
-    }
     renderPlanner();
   }
 
@@ -500,7 +532,6 @@
 
   function bindEvents() {
     document.querySelectorAll(".overlay-control").forEach(trackPointerFocus);
-    document.getElementById("earliest-button").addEventListener("click", jumpToEarliest);
     document.getElementById("soonest-button").addEventListener("click", jumpToSoonestBest);
     document.getElementById("earlier-button").addEventListener("click", function () { step(-1); });
     document.getElementById("later-button").addEventListener("click", function () { step(1); });
@@ -517,7 +548,7 @@
     try {
       renderNow();
       renderLengthSelect();
-      planner.start = findWorkable(nextSlotStart(), 1, true);
+      planner.start = findSoonestBest();
       renderPlanner();
       bindEvents();
       scheduleNextMinute();

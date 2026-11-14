@@ -38,13 +38,13 @@
   <section class="now" aria-labelledby="now-label">
     <div class="now-label" id="now-label">Right now</div>
     <div class="now-grid" id="now-grid"></div>
-    <p class="foot">Work hours are 9 AM to 6 PM. Awake hours are 7 AM to 11 PM. Sleep hours are 11 PM to 7 AM. Daylight saving is handled automatically.</p>
+    <p class="foot">Preferred hours are 9 AM to 6 PM unless someone has set their own. Daylight saving is handled automatically.</p>
   </section>
 
   <section class="planner" id="planner" aria-labelledby="planner-title">
     <div style="display:grid;gap:0.35rem">
       <h2 id="planner-title">Plan a meeting</h2>
-      <p>Pick a date to jump to its best time, then tap Earlier or Later to fine-tune.</p>
+      <p>Pick a date to jump to its best time, then tap Earlier or Later to move 30 minutes at a time.</p>
     </div>
     <div class="planner-controls">
       <button class="step-button step-earlier" id="earlier-button" type="button"><span class="step-arrow" aria-hidden="true"><span class="arrow-glyph"><svg class="arrow-icon" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></svg></span></span> Earlier</button>
@@ -64,8 +64,7 @@
     <ul class="plan-list" id="plan-list"></ul>
     <div class="plan-verdict" id="plan-verdict" role="status" aria-live="polite"></div>
     <div class="quick-actions">
-      <button class="primary-button" id="earliest-button" type="button">Earliest time possible</button>
-      <button class="primary-button" id="soonest-button" type="button">Earliest best time</button>
+      <button class="primary-button" id="soonest-button" type="button">Find earliest best time for all</button>
     </div>
   </section>
   <footer class="site-footer">
