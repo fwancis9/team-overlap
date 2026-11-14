@@ -82,8 +82,7 @@ p { margin: 0; color: var(--muted); }
 /* Rows join the parent grid so every label and every time lines up in two columns. */
 .hours-row { display: contents; }
 .hours-label { color: var(--muted); white-space: nowrap; }
-.hours-value { font-variant-numeric: tabular-nums; white-space: nowrap; }
-.hours-row.is-current .hours-label, .hours-row.is-current .hours-value { color: var(--text); }
+.hours-value { color: var(--text); font-variant-numeric: tabular-nums; white-space: nowrap; }
 
 
 .foot { font-size: 0.9rem; line-height: 1.3; }

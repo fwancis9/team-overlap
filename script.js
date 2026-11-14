@@ -108,15 +108,14 @@
     }
   }
 
-  /* Rows for the card: one "Every day" row, or Weekdays and Weekends with today's marked current. */
-  function preferredHoursRows(timestamp, person) {
-    const isWeekend = WEEKEND_DAYS.includes(localClock(timestamp, person.zone).weekday);
+  /* Rows for the card: one "Every day" row, or separate Weekdays and Weekends rows. */
+  function preferredHoursRows(person) {
     const weekdayText = windowsText(preferredHours(person, "Mon"));
     const weekendText = windowsText(preferredHours(person, "Sat"));
-    if (weekdayText === weekendText) return [{ label: "Every day", hours: weekdayText, isCurrent: true }];
+    if (weekdayText === weekendText) return [{ label: "Every day", hours: weekdayText }];
     return [
-      { label: "Weekdays", hours: weekdayText, isCurrent: !isWeekend },
-      { label: "Weekends", hours: weekendText, isCurrent: isWeekend }
+      { label: "Weekdays", hours: weekdayText },
+      { label: "Weekends", hours: weekendText }
     ];
   }
 
@@ -260,7 +259,7 @@
     if (element.dataset.key === key) return;
     element.dataset.key = key;
     const lines = rows.map(function (row) {
-      const line = createElement("div", "hours-row" + (row.isCurrent ? " is-current" : ""));
+      const line = createElement("div", "hours-row");
       line.append(createElement("span", "hours-label", row.label), createElement("span", "hours-value", row.hours));
       return line;
     });
@@ -280,7 +279,7 @@
       }
       card.parts.dayText.textContent = formatDateLong(now, person.zone);
       setStateLabel(card.parts.stateText, state, "now-state");
-      renderHoursRows(card.parts.hoursText, "Preferred hours, " + zoneName(now, person.zone), preferredHoursRows(now, person));
+      renderHoursRows(card.parts.hoursText, "Preferred hours, " + zoneName(now, person.zone), preferredHoursRows(person));
     });
   }
 
